@@ -37,7 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: [18.x, 20.x, 22.x]
 
       - name: Get current version
         id: version
@@ -93,8 +93,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          #cache: 'npm'
+          node-version: [18.x, 20.x, 22.x]
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -136,7 +136,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: [18.x, 20.x, 22.x]
          
 
       - name: Install dependencies
@@ -227,7 +227,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: [18.x, 20.x, 22.x]
 
       - name: Collect repository metrics
         run: |
