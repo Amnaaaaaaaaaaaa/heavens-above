@@ -2,7 +2,6 @@ name: Dependency Updates
 
 on:
   schedule:
-    # Check for updates every Monday at 9 AM UTC
     - cron: '0 9 * * 1'
   workflow_dispatch:
 
@@ -23,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18, 20, 22]
+          node-version: '22'
           cache: 'npm'
 
       - name: Install npm-check-updates
@@ -35,10 +34,10 @@ jobs:
           ncu --jsonUpgraded > updates.json
           if [ -s updates.json ]; then
             echo "updates=true" >> $GITHUB_OUTPUT
-            echo " Updates available"
+            echo "Updates available"
           else
             echo "updates=false" >> $GITHUB_OUTPUT
-            echo " All packages up to date"
+            echo "All packages up to date"
           fi
 
       - name: Upload updates report
@@ -62,7 +61,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: [18, 20, 22]
+          node-version: '22'
           cache: 'npm'
 
       - name: Install npm-check-updates
@@ -82,7 +81,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'chore(deps): update minor and patch dependencies'
-          title: ' Automated Dependency Updates - Minor & Patches'
+          title: 'Automated Dependency Updates - Minor & Patches'
           body: |
             ## Automated Dependency Updates
             
@@ -114,8 +113,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18, 20, 22]
-         cache: 'npm'
+          node-version: '22'
+          cache: 'npm'
 
       - name: Run npm audit fix
         run: |
@@ -138,7 +137,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'fix(security): apply security updates'
-          title: ' Security Updates - Automated Fix'
+          title: 'Security Updates - Automated Fix'
           body: |
             ## Security Updates Applied
             
@@ -178,7 +177,7 @@ jobs:
           echo "Review pull requests for detailed changes." >> report.md
 
       - name: Upload report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-update-report
           path: report.md

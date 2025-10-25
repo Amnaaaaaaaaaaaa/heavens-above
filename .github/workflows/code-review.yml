@@ -22,12 +22,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18, 20, 22]
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
-
+        run: npm ci
 
       - name: Run ESLint with annotations
         run: |
@@ -61,12 +60,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: [18, 20, 22]
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
-
+        run: npm ci
 
       - name: Run npm audit
         run: |
@@ -81,22 +79,13 @@ jobs:
         with:
           args: --severity-threshold=high --json-file-output=snyk-report.json
 
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'heavens-above'
-          path: '.'
-          format: 'HTML'
-        continue-on-error: true
-
       - name: Upload security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-scan-reports
           path: |
             npm-audit.json
             snyk-report.json
-            reports/
 
   coding-standards:
     name: Coding Standards Check
@@ -108,13 +97,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: [18, 20, 22]
+          node-version: '22'
           cache: 'npm'
-        
 
       - name: Install dependencies
-        run: npm install
-
+        run: npm ci
 
       - name: Check file naming conventions
         run: |
@@ -138,7 +125,7 @@ jobs:
           plato -r -d reports/plato src/ || true
 
       - name: Upload standards report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coding-standards-report
           path: reports/
@@ -153,24 +140,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18, 20, 22]
-         cache: 'npm' 
+          node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
-
+        run: npm ci
 
       - name: Run tests with coverage
         run: npm test -- --coverage --coverageReporters=json --coverageReporters=lcov
 
       - name: Coverage threshold check
         run: |
-          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+          COVERAGE=$(node -p "require('./coverage/coverage-summary.json').total.lines.pct")
           echo "Current coverage: $COVERAGE%"
-          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
-            echo " Warning: Coverage below 70%"
+          if [ $(echo "$COVERAGE < 70" | bc) -eq 1 ]; then
+            echo "Warning: Coverage below 70%"
           else
-            echo " Coverage meets threshold"
+            echo "Coverage meets threshold"
           fi
 
       - name: Upload coverage to Codecov
@@ -179,12 +165,6 @@ jobs:
           file: ./coverage/lcov.info
           flags: pr-tests
           name: pr-coverage
-
-      - name: Comment coverage on PR
-        uses: romeovs/lcov-reporter-action@v0.3.1
-        with:
-          lcov-file: ./coverage/lcov.info
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   pr-size-check:
     name: Pull Request Size Check
@@ -204,9 +184,9 @@ jobs:
           echo "Lines changed: $LINES_CHANGED"
           
           if [ "$FILES_CHANGED" -gt 20 ] || [ "$LINES_CHANGED" -gt 500 ]; then
-            echo " Large PR detected. Consider breaking it down."
+            echo "Large PR detected. Consider breaking it down."
           else
-            echo " PR size is reasonable"
+            echo "PR size is reasonable"
           fi
 
   review-summary:
