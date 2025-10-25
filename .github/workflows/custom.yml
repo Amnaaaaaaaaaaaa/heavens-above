@@ -38,6 +38,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: [18, 20, 22]
+          cache: 'npm'
 
       - name: Get current version
         id: version
@@ -137,7 +138,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: [18, 20, 22]
-         
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -228,7 +229,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: [18, 20, 22]
-
+          cache: 'npm'
       - name: Collect repository metrics
         run: |
           echo "# Project Analytics Report" > analytics.md

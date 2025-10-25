@@ -21,7 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
          node-version: [18, 20, 22]
-
+         cache: 'npm'
       - name: Create backup timestamp
         id: timestamp
         run: echo "date=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
