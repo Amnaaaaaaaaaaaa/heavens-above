@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18.x, 20.x, 22.x]
+         node-version: [18, 20, 22]
           cache: 'npm'
 
       - name: Install npm-check-updates
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: [18.x, 20.x, 22.x]
+          node-version: [18, 20, 22]
          
 
       - name: Install npm-check-updates
@@ -114,7 +114,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: [18.x, 20.x, 22.x]
+         node-version: [18, 20, 22]
          
 
       - name: Run npm audit fix
