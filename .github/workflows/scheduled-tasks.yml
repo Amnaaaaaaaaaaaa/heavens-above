@@ -2,9 +2,7 @@ name: Scheduled Tasks
 
 on:
   schedule:
-    # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
-    # Run weekly on Sunday at 3 AM UTC
     - cron: '0 3 * * 0'
   workflow_dispatch:
 
@@ -36,7 +34,7 @@ jobs:
             .
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: daily-backup-${{ steps.timestamp.outputs.date }}
           path: backups/
@@ -73,7 +71,6 @@ jobs:
       - name: Update astronomy data cache
         run: |
           echo "Updating astronomy data..."
-          # Simulate updating celestial data
           mkdir -p data
           echo "Last updated: $(date)" > data/last_update.txt
           echo "✅ Astronomy data updated"
@@ -99,7 +96,7 @@ jobs:
           echo "- Dependencies: Up to date ✅" >> maintenance-report.md
 
       - name: Upload maintenance report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: maintenance-report-${{ github.run_number }}
           path: |

@@ -2,7 +2,7 @@ name: Deployment Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 env:
@@ -34,7 +34,7 @@ jobs:
           NODE_ENV: production
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: production-build
           path: dist/
@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: production-build
           path: dist/
@@ -84,7 +84,7 @@ jobs:
       - name: Run smoke tests
         run: |
           curl -f https://staging.heavens-above.app || exit 1
-          echo "Smoke tests passed"
+          echo "✅ Smoke tests passed"
 
   deploy-production:
     name: Deploy to Production
@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: production-build
           path: dist/

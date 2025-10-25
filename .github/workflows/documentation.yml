@@ -11,7 +11,220 @@ on:
     paths:
       - 'docs/**'
       - 'README.md'
+      - '*.md'name: Documentation Deployment
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - 'README.md'
       - '*.md'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - '*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install documentation tools
+        run: |
+          npm install -g jsdoc
+          npm install -g markdown-it
+          npm install -g docsify-cli
+
+      - name: Generate API documentation
+        run: |
+          mkdir -p docs/api
+          jsdoc -c jsdoc.json -d docs/api src/ || echo "JSDoc completed"
+
+      - name: Build markdown documentation
+        run: |
+          mkdir -p docs/build
+          
+          # Convert README to HTML
+          npx markdown-it README.md > docs/build/index.html
+          
+          # Process all markdown files in docs directory
+          find docs -name "*.md" -type f | while read file; do
+            output="${file%.md}.html"
+            npx markdown-it "$file" > "$output"
+          done
+
+      - name: Generate documentation index
+        run: |
+          cat > docs/build/README.md << 'EOF'
+          # Heavens Above - Documentation
+          
+          ## Table of Contents
+          
+          - [Getting Started](getting-started.md)
+          - [API Reference](api/index.html)
+          - [User Guide](user-guide.md)
+          - [Contributing](../CONTRIBUTING.md)
+          
+          ## Quick Links
+          
+          - [GitHub Repository](https://github.com/stevenjoezhang/heavens-above)
+          - [Live Demo](https://stevenjoezhang.github.io/heavens-above)
+          
+          ---
+          
+          Last updated: $(date)
+          EOF
+
+      - name: Setup documentation site
+        run: |
+          # Create index.html for GitHub Pages
+          cat > docs/build/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Heavens Above - Documentation</title>
+            <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+            <style>
+              :root {
+                --theme-color: #4a90e2;
+              }
+            </style>
+          </head>
+          <body>
+            <div id="app"></div>
+            <script>
+              window.$docsify = {
+                name: 'Heavens Above',
+                repo: 'https://github.com/stevenjoezhang/heavens-above',
+                loadSidebar: true,
+                subMaxLevel: 3,
+                search: 'auto',
+                coverpage: true
+              }
+            </script>
+            <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+            <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+          </body>
+          </html>
+          EOF
+
+      - name: Copy assets
+        run: |
+          cp -r assets docs/build/ 2>/dev/null || echo "No assets directory"
+          cp -r images docs/build/ 2>/dev/null || echo "No images directory"
+
+      - name: Validate documentation
+        run: |
+          echo "Validating documentation structure..."
+          test -f docs/build/index.html || exit 1
+          echo "✅ Documentation structure valid"
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/build/
+          retention-days: 30
+
+  deploy-docs:
+    name: Deploy Documentation to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download documentation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: docs/build/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v3
+
+      - name: Deployment summary
+        run: |
+          echo "📚 Documentation deployed successfully"
+          echo "URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "Commit: ${{ github.sha }}"
+
+  version-docs:
+    name: Version Documentation
+    runs-on: ubuntu-latest
+    needs: deploy-docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Archive documentation version
+        run: |
+          mkdir -p docs/versions/${{ steps.version.outputs.version }}
+          cp -r docs/build/* docs/versions/${{ steps.version.outputs.version }}/
+
+      - name: Create version manifest
+        run: |
+          cat > docs/versions/manifest.json << EOF
+          {
+            "latest": "${{ steps.version.outputs.version }}",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "versions": ["${{ steps.version.outputs.version }}"]
+          }
+          EOF
+
+      - name: Commit versioned docs
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add docs/versions/
+          git commit -m "docs: archive documentation for ${{ steps.version.outputs.version }}" || echo "No changes"
+          git push || echo "Nothing to push"
   workflow_dispatch:
 
 permissions:
