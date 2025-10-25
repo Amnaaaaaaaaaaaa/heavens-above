@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+     
 
       - name: Install npm-check-updates
         run: npm install -g npm-check-updates
@@ -62,8 +62,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
+          
       - name: Install npm-check-updates
         run: npm install -g npm-check-updates
 
@@ -114,7 +113,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+         
 
       - name: Run npm audit fix
         run: |
