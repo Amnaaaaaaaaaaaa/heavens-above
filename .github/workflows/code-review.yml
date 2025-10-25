@@ -1,0 +1,235 @@
+name: Code Review Automation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint with annotations
+        run: |
+          npx eslint . --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-report.json || true
+          npx eslint . --ext .js,.jsx,.ts,.tsx --max-warnings 10
+
+      - name: Run Prettier check
+        run: |
+          npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}" || true
+
+      - name: Code complexity analysis
+        run: |
+          npm install -g complexity-report
+          cr --format json src/ > complexity-report.json || true
+
+      - name: Upload code quality reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-reports
+          path: |
+            eslint-report.json
+            complexity-report.json
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          npm audit --json > npm-audit.json || true
+          npm audit --audit-level=moderate
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json-file-output=snyk-report.json
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'heavens-above'
+          path: '.'
+          format: 'HTML'
+        continue-on-error: true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scan-reports
+          path: |
+            npm-audit.json
+            snyk-report.json
+            reports/
+
+  coding-standards:
+    name: Coding Standards Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check file naming conventions
+        run: |
+          echo "Checking file naming conventions..."
+          find src -type f -name "*.js" -o -name "*.jsx" | while read file; do
+            basename=$(basename "$file")
+            if [[ ! "$basename" =~ ^[a-z][a-zA-Z0-9]*\.(js|jsx)$ ]] && [[ ! "$basename" =~ ^[A-Z][a-zA-Z0-9]*\.(js|jsx)$ ]]; then
+              echo "Warning: $file does not follow naming convention"
+            fi
+          done
+
+      - name: Check code documentation
+        run: |
+          echo "Checking for proper documentation..."
+          npm install -g jsdoc
+          jsdoc -c jsdoc.json || echo "Documentation check completed"
+
+      - name: Analyze code metrics
+        run: |
+          npm install -g plato
+          plato -r -d reports/plato src/ || true
+
+      - name: Upload standards report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coding-standards-report
+          path: reports/
+
+  test-coverage:
+    name: Test Coverage Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage --coverageReporters=json --coverageReporters=lcov
+
+      - name: Coverage threshold check
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+          echo "Current coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo " Warning: Coverage below 70%"
+          else
+            echo " Coverage meets threshold"
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: pr-tests
+          name: pr-coverage
+
+      - name: Comment coverage on PR
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-size-check:
+    name: Pull Request Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR size
+        run: |
+          FILES_CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          LINES_CHANGED=$(git diff --shortstat origin/${{ github.base_ref }}...HEAD | awk '{print $4+$6}')
+          
+          echo "Files changed: $FILES_CHANGED"
+          echo "Lines changed: $LINES_CHANGED"
+          
+          if [ "$FILES_CHANGED" -gt 20 ] || [ "$LINES_CHANGED" -gt 500 ]; then
+            echo " Large PR detected. Consider breaking it down."
+          else
+            echo " PR size is reasonable"
+          fi
+
+  review-summary:
+    name: Generate Review Summary
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scan, coding-standards, test-coverage, pr-size-check]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Code Review Summary" > summary.md
+          echo "" >> summary.md
+          echo "## Job Results" >> summary.md
+          echo "- Code Quality: ${{ needs.code-quality.result }}" >> summary.md
+          echo "- Security Scan: ${{ needs.security-scan.result }}" >> summary.md
+          echo "- Coding Standards: ${{ needs.coding-standards.result }}" >> summary.md
+          echo "- Test Coverage: ${{ needs.test-coverage.result }}" >> summary.md
+          echo "- PR Size Check: ${{ needs.pr-size-check.result }}" >> summary.md
+          
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('summary.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

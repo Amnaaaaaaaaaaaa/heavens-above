@@ -1,0 +1,273 @@
+name: Custom Workflow - Release Automation & Analytics
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+jobs:
+  generate-changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.content }}
+      version: ${{ steps.version.outputs.new_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Get current version
+        id: version
+        run: |
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Calculate new version
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            npm version ${{ github.event.inputs.release_type }} --no-git-tag-version
+            NEW_VERSION="v$(node -p "require('./package.json').version")"
+          else
+            NEW_VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          
+          echo "# Changelog for ${{ steps.version.outputs.new_version }}" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "## What's Changed" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          
+          # Get commits since last tag
+          git log $PREV_TAG..HEAD --pretty=format:"- %s (%an)" --no-merges >> CHANGELOG.md
+          
+          echo "" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ steps.version.outputs.new_version }}" >> CHANGELOG.md
+          
+          cat CHANGELOG.md
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v3
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
+  build-release:
+    name: Build Release Assets
+    runs-on: ubuntu-latest
+    needs: generate-changelog
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build production
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Create distribution package
+        run: |
+          mkdir -p release
+          tar -czf release/heavens-above-${{ needs.generate-changelog.outputs.version }}.tar.gz dist/
+          zip -r release/heavens-above-${{ needs.generate-changelog.outputs.version }}.zip dist/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-assets
+          path: release/
+
+  performance-analysis:
+    name: Performance Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for analysis
+        run: npm run build
+
+      - name: Analyze bundle size
+        run: |
+          npm install -g webpack-bundle-analyzer
+          echo "Analyzing bundle size..."
+          du -sh dist/* > bundle-size.txt
+          cat bundle-size.txt
+
+      - name: Lighthouse CI
+        run: |
+          npm install -g @lhci/cli
+          lhci autorun || echo "Lighthouse scan completed"
+
+      - name: Generate performance report
+        run: |
+          cat > performance-report.md << 'EOF'
+          # Performance Report
+          
+          ## Bundle Size Analysis
+          $(cat bundle-size.txt)
+          
+          ## Build Time
+          Build completed at: $(date)
+          
+          ## Recommendations
+          - Monitor bundle size trends
+          - Optimize large dependencies
+          - Implement code splitting where applicable
+          EOF
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.md
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [generate-changelog, build-release, performance-analysis]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download changelog
+        uses: actions/download-artifact@v3
+        with:
+          name: changelog
+
+      - name: Download release assets
+        uses: actions/download-artifact@v3
+        with:
+          name: release-assets
+          path: release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: CHANGELOG.md
+          files: |
+            release/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo " Release ${{ needs.generate-changelog.outputs.version }} created successfully"
+          echo "View release at: https://github.com/${{ github.repository }}/releases/tag/${{ needs.generate-changelog.outputs.version }}"
+
+  analytics:
+    name: Project Analytics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Collect repository metrics
+        run: |
+          echo "# Project Analytics Report" > analytics.md
+          echo "Generated: $(date)" >> analytics.md
+          echo "" >> analytics.md
+          
+          echo "## Repository Metrics" >> analytics.md
+          echo "- Total Commits: $(git rev-list --count HEAD)" >> analytics.md
+          echo "- Contributors: $(git shortlog -sn --all | wc -l)" >> analytics.md
+          echo "- Branches: $(git branch -r | wc -l)" >> analytics.md
+          echo "- Tags: $(git tag | wc -l)" >> analytics.md
+          echo "" >> analytics.md
+          
+          echo "## Code Statistics" >> analytics.md
+          echo "- JavaScript Files: $(find . -name '*.js' | wc -l)" >> analytics.md
+          echo "- Total Lines: $(find . -name '*.js' -exec wc -l {} + | tail -1 | awk '{print $1}')" >> analytics.md
+          echo "" >> analytics.md
+          
+          echo "## Recent Activity" >> analytics.md
+          echo "- Last 10 commits:" >> analytics.md
+          git log -10 --pretty=format:"  - %s (%cr)" >> analytics.md
+
+      - name: Analyze code complexity
+        run: |
+          npm install -g complexity-report
+          cr --format plain src/ >> analytics.md || echo "Complexity analysis completed"
+
+      - name: Upload analytics report
+        uses: actions/upload-artifact@v3
+        with:
+          name: project-analytics
+          path: analytics.md
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Notification summary
+        run: |
+          echo " Release workflow completed"
+          echo "Status: ${{ needs.create-release.result }}"
+          echo "Version: ${{ needs.generate-changelog.outputs.version }}"
