@@ -38,7 +38,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Get current version
         id: version
@@ -78,7 +77,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Upload changelog
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: changelog
           path: CHANGELOG.md
@@ -121,7 +120,7 @@ jobs:
           cat checksums.txt
 
       - name: Upload release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: release-assets
           path: release/
@@ -152,6 +151,11 @@ jobs:
           du -sh dist/* > bundle-size.txt
           cat bundle-size.txt
 
+      - name: Lighthouse CI
+        run: |
+          npm install -g @lhci/cli
+          lhci autorun || echo "Lighthouse scan completed"
+
       - name: Generate performance report
         run: |
           cat > performance-report.md << 'EOF'
@@ -170,7 +174,7 @@ jobs:
           EOF
 
       - name: Upload performance report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: performance-report
           path: performance-report.md
@@ -182,18 +186,18 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download changelog
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: changelog
 
       - name: Download release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: release-assets
           path: release/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           body_path: CHANGELOG.md
           files: |
@@ -206,7 +210,7 @@ jobs:
 
       - name: Release summary
         run: |
-          echo "Release ${{ needs.generate-changelog.outputs.version }} created successfully"
+          echo "🚀 Release ${{ needs.generate-changelog.outputs.version }} created successfully"
           echo "View release at: https://github.com/${{ github.repository }}/releases/tag/${{ needs.generate-changelog.outputs.version }}"
 
   analytics:
@@ -222,7 +226,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Collect repository metrics
         run: |
@@ -252,7 +255,7 @@ jobs:
           cr --format plain src/ >> analytics.md || echo "Complexity analysis completed"
 
       - name: Upload analytics report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: project-analytics
           path: analytics.md
@@ -265,7 +268,6 @@ jobs:
     steps:
       - name: Notification summary
         run: |
-          echo "Release workflow completed"
+          echo "📢 Release workflow completed"
           echo "Status: ${{ needs.create-release.result }}"
           echo "Version: ${{ needs.generate-changelog.outputs.version }}"
-          

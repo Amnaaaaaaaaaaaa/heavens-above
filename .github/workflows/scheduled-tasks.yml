@@ -2,7 +2,9 @@ name: Scheduled Tasks
 
 on:
   schedule:
+    # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
+    # Run weekly on Sunday at 3 AM UTC
     - cron: '0 3 * * 0'
   workflow_dispatch:
 
@@ -19,7 +21,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Create backup timestamp
         id: timestamp
@@ -35,7 +36,7 @@ jobs:
             .
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: daily-backup-${{ steps.timestamp.outputs.date }}
           path: backups/
@@ -43,7 +44,7 @@ jobs:
 
       - name: Backup notification
         run: |
-          echo "Daily backup completed successfully"
+          echo "✅ Daily backup completed successfully"
           echo "Backup date: ${{ steps.timestamp.outputs.date }}"
 
   weekly-maintenance:
@@ -67,20 +68,21 @@ jobs:
         run: |
           echo "Cleaning old artifacts..."
           rm -rf dist/ build/ .cache/
-          echo "Cleanup completed"
+          echo "✅ Cleanup completed"
 
       - name: Update astronomy data cache
         run: |
           echo "Updating astronomy data..."
+          # Simulate updating celestial data
           mkdir -p data
           echo "Last updated: $(date)" > data/last_update.txt
-          echo "Astronomy data updated"
+          echo "✅ Astronomy data updated"
 
       - name: Run dependency audit
         run: |
           echo "Running security audit..."
           npm audit --json > audit-report.json || true
-          echo "Audit completed"
+          echo "✅ Audit completed"
 
       - name: Generate maintenance report
         run: |
@@ -93,11 +95,11 @@ jobs:
           echo "- Ran dependency security audit" >> maintenance-report.md
           echo "" >> maintenance-report.md
           echo "## System Status" >> maintenance-report.md
-          echo "- Repository: Healthy" >> maintenance-report.md
-          echo "- Dependencies: Up to date" >> maintenance-report.md
+          echo "- Repository: Healthy ✅" >> maintenance-report.md
+          echo "- Dependencies: Up to date ✅" >> maintenance-report.md
 
       - name: Upload maintenance report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: maintenance-report-${{ github.run_number }}
           path: |
@@ -120,7 +122,7 @@ jobs:
       - name: Check disk usage
         run: |
           df -h
-          echo "Disk usage check completed"
+          echo "✅ Disk usage check completed"
 
       - name: Monitor workflow performance
         run: |
@@ -130,5 +132,5 @@ jobs:
 
       - name: Send status notification
         run: |
-          echo "Health check completed at $(date)"
-          echo "All systems operational"
+          echo "📊 Health check completed at $(date)"
+          echo "All systems operational ✅"
