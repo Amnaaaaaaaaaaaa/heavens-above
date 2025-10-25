@@ -2,7 +2,7 @@ name: Documentation Deployment
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
     paths:
       - 'docs/**'
       - 'README.md'
@@ -16,12 +16,10 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
-  build-docs:
-    name: Build Documentation
+  build-and-deploy-docs:
+    name: Build and Deploy Documentation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -34,75 +32,72 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install documentation tools
-        run: |
-          npm install -g jsdoc
-          npm install -g markdown-it
-          npm install -g docsify-cli
-
-      - name: Generate API documentation
-        run: |
-          mkdir -p docs/api
-          jsdoc -r -d docs/api src/ || echo "JSDoc completed"
-
-      - name: Build markdown documentation
+      - name: Create documentation structure
         run: |
           mkdir -p docs/build
-          # Convert README to HTML
-          npx markdown-it README.md > docs/build/index.html || echo "Markdown processing completed"
-
-      - name: Generate documentation index
-        run: |
-          cat > docs/build/README.md << 'EOF'
-          # Heavens Above - Documentation
           
-          ## Table of Contents
+          # Copy all markdown files to build directory
+          cp -r docs/*.md docs/build/ 2>/dev/null || echo "No markdown files to copy"
           
-          - [Getting Started](getting-started.html)
-          - [API Reference](api/index.html)
-          - [User Guide](user-guide.html)
-          
-          ## Quick Links
-          
-          - [GitHub Repository](https://github.com/stevenjoezhang/heavens-above)
-          - [Live Demo](https://stevenjoezhang.github.io/heavens-above)
-          
-          ---
-          
-          Last updated: $(date)
-          EOF
-
-      - name: Create basic HTML structure
-        run: |
+          # Create index.html
           cat > docs/build/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Heavens Above - Documentation</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-                  h1 { color: #4a90e2; }
-                  .container { max-width: 800px; margin: 0 auto; }
-              </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Heavens Above - Documentation</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                line-height: 1.6;
+              }
+              h1 { color: #2c3e50; }
+              h2 { color: #3498db; margin-top: 30px; }
+              .nav { background: #f4f4f4; padding: 15px; margin-bottom: 20px; }
+              .nav a { margin-right: 15px; color: #3498db; text-decoration: none; }
+              .nav a:hover { text-decoration: underline; }
+            </style>
           </head>
           <body>
-              <div class="container">
-                  <h1>Heavens Above Documentation</h1>
-                  <p>Welcome to the Heavens Above project documentation.</p>
-                  <p>This documentation is automatically generated and deployed.</p>
-                  <p><a href="README.md">View Documentation</a></p>
-              </div>
+            <div class="nav">
+              <a href="index.html">Home</a>
+              <a href="README.html">Documentation</a>
+              <a href="getting-started.html">Getting Started</a>
+              <a href="user-guide.html">User Guide</a>
+            </div>
+            
+            <h1>Heavens Above - Documentation</h1>
+            
+            <h2>Welcome</h2>
+            <p>Welcome to the Heavens Above project documentation. This astronomy visualization application helps you explore celestial objects and astronomical events.</p>
+            
+            <h2>Quick Links</h2>
+            <ul>
+              <li><a href="https://github.com/Amnaaaaaaaaaaaa/heavens-above">GitHub Repository</a></li>
+              <li><a href="README.html">Full Documentation</a></li>
+              <li><a href="getting-started.html">Getting Started Guide</a></li>
+            </ul>
+            
+            <h2>About</h2>
+            <p>This documentation was automatically generated and deployed using GitHub Actions.</p>
+            <p>Last updated: <span id="date"></span></p>
+            <script>document.getElementById('date').textContent = new Date().toLocaleString();</script>
           </body>
           </html>
           EOF
 
-      - name: Validate documentation
-        run: |
-          echo "Validating documentation structure..."
-          test -f docs/build/index.html || exit 1
-          echo "✅ Documentation structure valid"
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/build
+          publish_branch: gh-pages-docs
+          force_orphan: true
 
       - name: Upload documentation artifact
         uses: actions/upload-artifact@v4
@@ -111,37 +106,9 @@ jobs:
           path: docs/build/
           retention-days: 30
 
-  deploy-docs:
-    name: Deploy Documentation to GitHub Pages
-    runs-on: ubuntu-latest
-    needs: build-docs
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download documentation artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: documentation
-          path: docs/build/
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/build/
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v3
-
       - name: Deployment summary
+        if: github.event_name == 'push'
         run: |
           echo "📚 Documentation deployed successfully"
-          echo "URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "Branch: gh-pages-docs"
+          echo "Commit: ${{ github.sha }}"
