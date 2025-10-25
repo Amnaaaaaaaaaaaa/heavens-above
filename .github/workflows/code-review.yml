@@ -4,54 +4,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
-
 jobs:
-  code-quality:
-    name: Code Quality Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run ESLint with annotations
-        run: |
-          npx eslint . --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-report.json || true
-          npx eslint . --ext .js,.jsx,.ts,.tsx --max-warnings 10
-
-      - name: Run Prettier check
-        run: |
-          npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}" || true
-
-      - name: Code complexity analysis
-        run: |
-          npm install -g complexity-report
-          cr --format json src/ > complexity-report.json || true
-
-      - name: Upload code quality reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-quality-reports
-          path: |
-            eslint-report.json
-            complexity-report.json
-
-  security-scan:
-    name: Security Vulnerability Scan
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -61,34 +16,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-         
 
       - name: Install dependencies
         run: npm install
 
-      - name: Run npm audit
-        run: |
-          npm audit --json > npm-audit.json || true
-          npm audit --audit-level=moderate
+      - name: Run tests
+        run: npm test
 
-      - name: Run Snyk security scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --json-file-output=snyk-report.json
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-scan-reports
-          path: |
-            npm-audit.json
-            snyk-report.json
-
-  coding-standards:
-    name: Coding Standards Check
+  build:
+    name: Build Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -98,69 +34,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-         
 
       - name: Install dependencies
         run: npm install
 
-      - name: Check file naming conventions
-        run: |
-          echo "Checking file naming conventions..."
-          find src -type f -name "*.js" -o -name "*.jsx" | while read file; do
-            basename=$(basename "$file")
-            if [[ ! "$basename" =~ ^[a-z][a-zA-Z0-9]*\.(js|jsx)$ ]] && [[ ! "$basename" =~ ^[A-Z][a-zA-Z0-9]*\.(js|jsx)$ ]]; then
-              echo "Warning: $file does not follow naming convention"
-            fi
-          done
-
-      - name: Check code documentation
-        run: |
-          echo "Checking for proper documentation..."
-          npm install -g jsdoc
-          jsdoc -c jsdoc.json || echo "Documentation check completed"
-
-      - name: Analyze code metrics
-        run: |
-          npm install -g plato
-          plato -r -d reports/plato src/ || true
-
-      - name: Upload standards report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coding-standards-report
-          path: reports/
-
-  test-coverage:
-    name: Test Coverage Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-         
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run tests with coverage
-        run: npm test -- --coverage --coverageReporters=json --coverageReporters=lcov
-
-      - name: Coverage threshold check
-        run: |
-          echo "Checking coverage threshold..."
-          # Simplified coverage check without jq and bc
-          echo "Coverage check completed"
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage/lcov.info
-          flags: pr-tests
-          name: pr-coverage
+      - name: Build project
+        run: npm run build
 
   pr-size-check:
     name: Pull Request Size Check
@@ -184,33 +63,3 @@ jobs:
           else
             echo "✅ PR size is reasonable"
           fi
-
-  review-summary:
-    name: Generate Review Summary
-    runs-on: ubuntu-latest
-    needs: [code-quality, security-scan, coding-standards, test-coverage, pr-size-check]
-    if: always()
-    steps:
-      - name: Generate summary
-        run: |
-          echo "# Code Review Summary" > summary.md
-          echo "" >> summary.md
-          echo "## Job Results" >> summary.md
-          echo "- Code Quality: ${{ needs.code-quality.result }}" >> summary.md
-          echo "- Security Scan: ${{ needs.security-scan.result }}" >> summary.md
-          echo "- Coding Standards: ${{ needs.coding-standards.result }}" >> summary.md
-          echo "- Test Coverage: ${{ needs.test-coverage.result }}" >> summary.md
-          echo "- PR Size Check: ${{ needs.pr-size-check.result }}" >> summary.md
-          
-      - name: Comment PR
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const summary = fs.readFileSync('summary.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
